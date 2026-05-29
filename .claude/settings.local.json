@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash /Users/beson/0316/ci-scripts/deploy.sh -e uat -s bo -n)",
+      "Bash(bash *)",
+      "Bash(chmod +x *)"
+    ]
+  }
+}
