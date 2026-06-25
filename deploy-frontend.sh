@@ -262,3 +262,12 @@ else
     echo -e "${GREEN}${BOLD}║   Frontend Deploy 全部完成！     ║${RESET}"
     echo -e "${GREEN}${BOLD}╚══════════════════════════════════╝${RESET}"
 fi
+
+# player Orange
+# docker buildx build --platform linux/amd64 --load \
+# -t registry.mootech.asia/mttw-dev/docker-images/cms-player-web-prod-orange:latest \
+# -t registry.mootech.asia/mttw-dev/docker-images/cms-player-web-prod-orange:v0.0.1-orange \
+#   .
+
+# docker push registry.mootech.asia/mttw-dev/docker-images/cms-player-web-prod-orange:latest
+# docker push registry.mootech.asia/mttw-dev/docker-images/cms-player-web-prod-orange:v0.0.1-orange
