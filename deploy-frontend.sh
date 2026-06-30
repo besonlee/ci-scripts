@@ -36,8 +36,8 @@ ${BOLD}必填:${RESET}
   -e <env>        環境: dev | uat | prod
 
 ${BOLD}選填:${RESET}
-  -s <service>    服務: bo | customer | all（預設: all）
-                  可多次指定，例如: -s bo -s customer
+  -s <service>    服務: bo | customer | orange | all（預設: all）
+                  可多次指定，例如: -s bo -s customer -s orange
   -b <branch>     覆蓋分支（預設: dev→develop, uat→uat, prod→master）
   -t              同時推送 Git SHA tag（僅 dev/uat 有效，預設不推）
   -n              Dry run：只印出指令，不實際執行
@@ -231,6 +231,26 @@ build_customer() {
         "$REGISTRY/cms-customer-frontend${IMAGE_SUFFIX}:latest"
 }
 
+build_customer_orange() {
+    local SOURCE_DIR="$SCRIPT_DIR/cms-customer-frontend"
+    sync_repo "$REPO_CUSTOMER" "$SOURCE_DIR"
+
+    TAG_VERSION=""
+    if [[ "$ENV" == "prod" ]]; then
+        TAG_VERSION=$(git -C "$SOURCE_DIR" tag --sort=-version:refname | head -1)
+        [[ -z "$TAG_VERSION" ]] && error "cms-customer-frontend 找不到任何 git tag，請先執行 ./tag-release-frontend.sh -m"
+        info "使用最新 tag: $TAG_VERSION"
+        TAG_VERSION="${TAG_VERSION}-orange"
+    fi
+
+    GIT_SHA=$(git -C "$SOURCE_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    info "Git SHA:   $GIT_SHA"
+
+    build_and_push "Customer Frontend (Orange)" \
+        "$SOURCE_DIR" \
+        "$REGISTRY/cms-player-web${IMAGE_SUFFIX}-orange:latest"
+}
+
 # ─── 執行 Build ──────────────────────────────────────────────
 FAILED=()
 
@@ -239,11 +259,13 @@ build_service() {
     case "$SVC" in
         bo)       build_bo ;;
         customer) build_customer ;;
+        orange)   build_customer_orange ;;
         all)
             build_bo
             build_customer
+            build_customer_orange
             ;;
-        *) error "未知服務: $SVC，可選: bo | customer | all" ;;
+        *) error "未知服務: $SVC，可選: bo | customer | orange | all" ;;
     esac
 }
 
@@ -262,12 +284,3 @@ else
     echo -e "${GREEN}${BOLD}║   Frontend Deploy 全部完成！     ║${RESET}"
     echo -e "${GREEN}${BOLD}╚══════════════════════════════════╝${RESET}"
 fi
-
-# player Orange
-# docker buildx build --platform linux/amd64 --load \
-# -t registry.mootech.asia/mttw-dev/docker-images/cms-player-web-prod-orange:latest \
-# -t registry.mootech.asia/mttw-dev/docker-images/cms-player-web-prod-orange:v0.0.1-orange \
-#   .
-
-# docker push registry.mootech.asia/mttw-dev/docker-images/cms-player-web-prod-orange:latest
-# docker push registry.mootech.asia/mttw-dev/docker-images/cms-player-web-prod-orange:v0.0.1-orange
