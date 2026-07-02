@@ -48,7 +48,7 @@ ${BOLD}Prod 流程:${RESET}
   再執行 ./deploy-frontend.sh -e prod，會自動取用最新 tag 作為 image tag。
 
 ${BOLD}環境對應 Registry:${RESET}
-  dev  →  192.168.111.88:5001
+  dev  →  192.168.100.112:5001
   uat  →  registry.mootech.asia/mttw-dev/docker-images
   prod →  registry.mootech.asia/mttw-dev/docker-images  (image 名稱加 -prod)
 
@@ -95,7 +95,7 @@ fi
 
 # ─── Registry 設定 ───────────────────────────────────────────
 if [[ "$ENV" == "dev" ]]; then
-    REGISTRY="192.168.111.88:5001"
+    REGISTRY="192.168.100.112:5001"
     IMAGE_SUFFIX=""
 elif [[ "$ENV" == "uat" ]]; then
     REGISTRY="registry.mootech.asia/mttw-dev/docker-images"
