@@ -209,7 +209,7 @@ build_bo() {
 
     build_and_push "BO Frontend" \
         "$SOURCE_DIR" \
-        "$REGISTRY/cms-bo-frontend${IMAGE_SUFFIX}:latest"
+        "$REGISTRY/cms-bo-web${IMAGE_SUFFIX}:latest"
 }
 
 build_customer() {
