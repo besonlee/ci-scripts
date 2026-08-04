@@ -36,12 +36,15 @@ ${BOLD}必填:${RESET}
   -e <env>        環境: dev | uat | prod
 
 ${BOLD}選填:${RESET}
-  -s <service>    服務: bo | customer | orange | all（預設: all）
-                  可多次指定，例如: -s bo -s customer -s orange
-  -b <branch>     覆蓋分支（預設: dev→develop, uat→uat, prod→master）
+  -s <service>    服務: bo | customer | orange | purple | all（預設: all）
+                  可多次指定，例如: -s bo -s customer -s orange -s purple
+  -b <branch>     覆蓋分支（預設: dev→develop, uat→uat, prod→master；不影響 purple）
   -t              同時推送 Git SHA tag（僅 dev/uat 有效，預設不推）
   -n              Dry run：只印出指令，不實際執行
   -h              顯示此說明
+
+${BOLD}Purple 主題:${RESET}
+  不論 -e / -b 為何，purple 固定 checkout customer repo 的 theme-purple 分支打包。
 
 ${BOLD}Prod 流程:${RESET}
   請先執行 ./tag-release-frontend.sh -um 完成合版與打 tag，
@@ -60,6 +63,7 @@ ${BOLD}範例:${RESET}
   $0 -e dev -s all
   $0 -e uat -s bo
   $0 -e prod -s all
+  $0 -e dev -s purple                      # 只打包 theme-purple 版本
   $0 -e dev -b feature/xxx
   $0 -e dev -n                             # dry run
 EOF
@@ -133,19 +137,20 @@ GIT_SHA=""
 sync_repo() {
     local REPO_URL="$1"
     local SOURCE_DIR="$2"
+    local TARGET_BRANCH="${3:-$BRANCH}"
     local REPO_NAME
     REPO_NAME="$(basename "$REPO_URL" .git)"
 
     step "取得原始碼: $REPO_NAME"
     if [[ ! -d "$SOURCE_DIR" ]]; then
         info "目錄不存在，執行 clone: $REPO_URL → $SOURCE_DIR"
-        run git clone --branch "$BRANCH" "$REPO_URL" "$SOURCE_DIR"
+        run git clone --branch "$TARGET_BRANCH" "$REPO_URL" "$SOURCE_DIR"
         success "Clone 完成"
     elif [[ -d "$SOURCE_DIR/.git" ]]; then
-        info "切換至 branch: $BRANCH"
+        info "切換至 branch: $TARGET_BRANCH"
         run git -C "$SOURCE_DIR" fetch origin
-        run git -C "$SOURCE_DIR" checkout "$BRANCH"
-        run git -C "$SOURCE_DIR" pull origin "$BRANCH"
+        run git -C "$SOURCE_DIR" checkout "$TARGET_BRANCH"
+        run git -C "$SOURCE_DIR" pull origin "$TARGET_BRANCH"
         success "原始碼更新完成"
     else
         error "$SOURCE_DIR 已存在但不是 git repo，請移除後重試"
@@ -251,6 +256,26 @@ build_customer_orange() {
         "$REGISTRY/cms-player-web${IMAGE_SUFFIX}-orange:latest"
 }
 
+build_customer_purple() {
+    local SOURCE_DIR="$SCRIPT_DIR/cms-customer-frontend"
+    local PURPLE_BRANCH="theme-purple"
+    sync_repo "$REPO_CUSTOMER" "$SOURCE_DIR" "$PURPLE_BRANCH"
+
+    TAG_VERSION=""
+    if [[ "$ENV" == "prod" ]]; then
+        TAG_VERSION=$(git -C "$SOURCE_DIR" tag --sort=-version:refname | head -1)
+        [[ -z "$TAG_VERSION" ]] && error "cms-customer-frontend ($PURPLE_BRANCH) 找不到任何 git tag，請先執行 ./tag-release-frontend.sh -m"
+        info "使用最新 tag: $TAG_VERSION"
+    fi
+
+    GIT_SHA=$(git -C "$SOURCE_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    info "Git SHA:   $GIT_SHA"
+
+    build_and_push "Customer Frontend (Purple)" \
+        "$SOURCE_DIR" \
+        "$REGISTRY/cms-player-web${IMAGE_SUFFIX}:latest"
+}
+
 # ─── 執行 Build ──────────────────────────────────────────────
 FAILED=()
 
@@ -260,12 +285,14 @@ build_service() {
         bo)       build_bo ;;
         customer) build_customer ;;
         orange)   build_customer_orange ;;
+        purple)   build_customer_purple ;;
         all)
             build_bo
             build_customer
             build_customer_orange
+            build_customer_purple
             ;;
-        *) error "未知服務: $SVC，可選: bo | customer | orange | all" ;;
+        *) error "未知服務: $SVC，可選: bo | customer | orange | purple | all" ;;
     esac
 }
 

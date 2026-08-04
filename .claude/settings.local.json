@@ -3,7 +3,14 @@
     "allow": [
       "Bash(bash /Users/beson/0316/ci-scripts/deploy.sh -e uat -s bo -n)",
       "Bash(bash *)",
-      "Bash(chmod +x *)"
+      "Bash(chmod +x *)",
+      "Bash(rtk find *)",
+      "Bash(/usr/bin/find *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk git *)",
+      "Bash(rtk proxy *)",
+      "Bash(./deploy-frontend.sh *)"
     ]
   }
 }
