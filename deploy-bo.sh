@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# CMS 前端 Docker 打包推送腳本
-# 用法: ./deploy-frontend.sh -e <env> [-s <service>] [-b <branch>]
+# CMS 後台前端 Docker 打包推送腳本
+# 用法: ./deploy-bo.sh -e <env> [-b <branch>]
 
 set -euo pipefail
 
@@ -17,11 +17,9 @@ step()    { echo -e "\n${BOLD}>>> $*${RESET}"; }
 # ─── Repo 定義 ───────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_BO="http://gitlab.mootech.asia/mttw-dev/cms-bo-frontend.git"
-REPO_CUSTOMER="http://gitlab.mootech.asia/mttw-dev/cms-customer-frontend.git"
 
 # ─── 預設值 ──────────────────────────────────────────────────
 ENV=""
-SERVICES=()
 BRANCH=""
 DRY_RUN=false
 SHA_TAG=false
@@ -36,34 +34,27 @@ ${BOLD}必填:${RESET}
   -e <env>        環境: dev | uat | prod
 
 ${BOLD}選填:${RESET}
-  -s <service>    服務: bo | customer | orange | purple | all（預設: all）
-                  可多次指定，例如: -s bo -s customer -s orange -s purple
-  -b <branch>     覆蓋分支（預設: dev→develop, uat→uat, prod→master；不影響 purple）
+  -b <branch>     覆蓋分支（預設: dev→develop, uat→uat, prod→master）
   -t              同時推送 Git SHA tag（僅 dev/uat 有效，預設不推）
   -n              Dry run：只印出指令，不實際執行
   -h              顯示此說明
 
-${BOLD}Purple 主題:${RESET}
-  不論 -e / -b 為何，purple 固定 checkout customer repo 的 theme-purple 分支打包。
-
 ${BOLD}Prod 流程:${RESET}
-  請先執行 ./tag-release-frontend.sh -um 完成合版與打 tag，
-  再執行 ./deploy-frontend.sh -e prod，會自動取用最新 tag 作為 image tag。
+  請先執行 ./tag-bo.sh -um 完成合版與打 tag，
+  再執行 ./deploy-bo.sh -e prod，會自動取用最新 tag 作為 image tag。
 
 ${BOLD}環境對應 Registry:${RESET}
   dev  →  192.168.100.112:5001
   uat  →  registry.mootech.asia/mttw-dev/docker-images
   prod →  registry.mootech.asia/mttw-dev/docker-images  (image 名稱加 -prod)
 
-${BOLD}前端 Repos:${RESET}
-  bo       →  $REPO_BO
-  customer →  $REPO_CUSTOMER
+${BOLD}後台 Repo:${RESET}
+  bo →  $REPO_BO
 
 ${BOLD}範例:${RESET}
-  $0 -e dev -s all
-  $0 -e uat -s bo
-  $0 -e prod -s all
-  $0 -e dev -s purple                      # 只打包 theme-purple 版本
+  $0 -e dev
+  $0 -e uat
+  $0 -e prod
   $0 -e dev -b feature/xxx
   $0 -e dev -n                             # dry run
 EOF
@@ -71,10 +62,9 @@ EOF
 }
 
 # ─── 解析參數 ────────────────────────────────────────────────
-while getopts "e:s:b:tnh" opt; do
+while getopts "e:b:tnh" opt; do
     case "$opt" in
         e) ENV="$OPTARG" ;;
-        s) SERVICES+=("$OPTARG") ;;
         b) BRANCH="$OPTARG" ;;
         t) SHA_TAG=true ;;
         n) DRY_RUN=true ;;
@@ -94,8 +84,6 @@ if [[ -z "$BRANCH" ]]; then
         prod) BRANCH="master" ;;
     esac
 fi
-
-[[ ${#SERVICES[@]} -eq 0 ]] && SERVICES=("all")
 
 # ─── Registry 設定 ───────────────────────────────────────────
 if [[ "$ENV" == "dev" ]]; then
@@ -120,17 +108,16 @@ run() {
 
 # ─── 摘要輸出 ────────────────────────────────────────────────
 echo -e "\n${BOLD}╔══════════════════════════════════╗${RESET}"
-echo -e "${BOLD}║   CMS Frontend Deploy Script     ║${RESET}"
+echo -e "${BOLD}║   CMS BO Frontend Deploy Script  ║${RESET}"
 echo -e "${BOLD}╚══════════════════════════════════╝${RESET}"
 info "環境:      $ENV"
 info "Registry:  $REGISTRY"
 info "Branch:    $BRANCH"
-info "服務:      ${SERVICES[*]}"
 $SHA_TAG && info "SHA Tag:   啟用（-t）"
 $DRY_RUN && warn "DRY-RUN 模式，不會實際執行"
 
 # ─── Build helpers ───────────────────────────────────────────
-# TAG_VERSION / GIT_SHA 由各 build 函式在呼叫前設定
+# TAG_VERSION / GIT_SHA 由 build 函式在呼叫前設定
 TAG_VERSION=""
 GIT_SHA=""
 
@@ -198,14 +185,48 @@ build_and_push() {
     done
 }
 
+# BO 前端依環境設定 .env.production（dev 用內網 API，uat/prod 用相對路徑）
+configure_bo_env() {
+    local SOURCE_DIR="$1"
+    local ENV_FILE="$SOURCE_DIR/.env.production"
+    if [[ ! -f "$ENV_FILE" ]]; then
+        warn "找不到 $ENV_FILE，略過環境變數設定"
+        return
+    fi
+
+    local API_URL TURNSTILE_KEY
+    if [[ "$ENV" == "dev" ]]; then
+        API_URL="http://192.168.111.88:30080/api"
+        TURNSTILE_KEY="1x00000000000000000000AA"
+    else
+        # uat / prod 共用同一組
+        API_URL="/api"
+        TURNSTILE_KEY="0x4AAAAAACNU5m_Cp5SShb15"
+    fi
+
+    step "設定 .env.production ($ENV)"
+    if $DRY_RUN; then
+        echo -e "  ${YELLOW}[DRY-RUN]${RESET} 寫入 NEXT_PUBLIC_API_URL=$API_URL"
+        echo -e "  ${YELLOW}[DRY-RUN]${RESET} 寫入 NEXT_PUBLIC_TURNSTILE_SITE_KEY=$TURNSTILE_KEY"
+    else
+        sed -i.bak \
+            -e "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=${API_URL}|" \
+            -e "s|^NEXT_PUBLIC_TURNSTILE_SITE_KEY=.*|NEXT_PUBLIC_TURNSTILE_SITE_KEY=${TURNSTILE_KEY}|" \
+            "$ENV_FILE"
+        rm -f "${ENV_FILE}.bak"
+        success "已寫入 NEXT_PUBLIC_API_URL=$API_URL, NEXT_PUBLIC_TURNSTILE_SITE_KEY=$TURNSTILE_KEY"
+    fi
+}
+
 build_bo() {
     local SOURCE_DIR="$SCRIPT_DIR/cms-bo-frontend"
     sync_repo "$REPO_BO" "$SOURCE_DIR"
+    configure_bo_env "$SOURCE_DIR"
 
     TAG_VERSION=""
     if [[ "$ENV" == "prod" ]]; then
         TAG_VERSION=$(git -C "$SOURCE_DIR" tag --sort=-version:refname | head -1)
-        [[ -z "$TAG_VERSION" ]] && error "cms-bo-frontend 找不到任何 git tag，請先執行 ./tag-release-frontend.sh -m"
+        [[ -z "$TAG_VERSION" ]] && error "cms-bo-frontend 找不到任何 git tag，請先執行 ./tag-bo.sh -m"
         info "使用最新 tag: $TAG_VERSION"
     fi
 
@@ -217,97 +238,11 @@ build_bo() {
         "$REGISTRY/cms-bo-web${IMAGE_SUFFIX}:latest"
 }
 
-build_customer() {
-    local SOURCE_DIR="$SCRIPT_DIR/cms-customer-frontend"
-    sync_repo "$REPO_CUSTOMER" "$SOURCE_DIR"
-
-    TAG_VERSION=""
-    if [[ "$ENV" == "prod" ]]; then
-        TAG_VERSION=$(git -C "$SOURCE_DIR" tag --sort=-version:refname | head -1)
-        [[ -z "$TAG_VERSION" ]] && error "cms-customer-frontend 找不到任何 git tag，請先執行 ./tag-release-frontend.sh -m"
-        info "使用最新 tag: $TAG_VERSION"
-    fi
-
-    GIT_SHA=$(git -C "$SOURCE_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-    info "Git SHA:   $GIT_SHA"
-
-    build_and_push "Customer Frontend" \
-        "$SOURCE_DIR" \
-        "$REGISTRY/cms-customer-frontend${IMAGE_SUFFIX}:latest"
-}
-
-build_customer_orange() {
-    local SOURCE_DIR="$SCRIPT_DIR/cms-customer-frontend"
-    sync_repo "$REPO_CUSTOMER" "$SOURCE_DIR"
-
-    TAG_VERSION=""
-    if [[ "$ENV" == "prod" ]]; then
-        TAG_VERSION=$(git -C "$SOURCE_DIR" tag --sort=-version:refname | head -1)
-        [[ -z "$TAG_VERSION" ]] && error "cms-customer-frontend 找不到任何 git tag，請先執行 ./tag-release-frontend.sh -m"
-        info "使用最新 tag: $TAG_VERSION"
-        TAG_VERSION="${TAG_VERSION}-orange"
-    fi
-
-    GIT_SHA=$(git -C "$SOURCE_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-    info "Git SHA:   $GIT_SHA"
-
-    build_and_push "Customer Frontend (Orange)" \
-        "$SOURCE_DIR" \
-        "$REGISTRY/cms-player-web${IMAGE_SUFFIX}-orange:latest"
-}
-
-build_customer_purple() {
-    local SOURCE_DIR="$SCRIPT_DIR/cms-customer-frontend"
-    local PURPLE_BRANCH="theme-purple"
-    sync_repo "$REPO_CUSTOMER" "$SOURCE_DIR" "$PURPLE_BRANCH"
-
-    TAG_VERSION=""
-    if [[ "$ENV" == "prod" ]]; then
-        TAG_VERSION=$(git -C "$SOURCE_DIR" tag --sort=-version:refname | head -1)
-        [[ -z "$TAG_VERSION" ]] && error "cms-customer-frontend ($PURPLE_BRANCH) 找不到任何 git tag，請先執行 ./tag-release-frontend.sh -m"
-        info "使用最新 tag: $TAG_VERSION"
-    fi
-
-    GIT_SHA=$(git -C "$SOURCE_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
-    info "Git SHA:   $GIT_SHA"
-
-    build_and_push "Customer Frontend (Purple)" \
-        "$SOURCE_DIR" \
-        "$REGISTRY/cms-player-web${IMAGE_SUFFIX}:latest"
-}
-
 # ─── 執行 Build ──────────────────────────────────────────────
-FAILED=()
-
-build_service() {
-    local SVC="$1"
-    case "$SVC" in
-        bo)       build_bo ;;
-        customer) build_customer ;;
-        orange)   build_customer_orange ;;
-        purple)   build_customer_purple ;;
-        all)
-            build_bo
-            build_customer
-            build_customer_orange
-            build_customer_purple
-            ;;
-        *) error "未知服務: $SVC，可選: bo | customer | orange | purple | all" ;;
-    esac
-}
-
-for SVC in "${SERVICES[@]}"; do
-    if ! build_service "$SVC"; then
-        FAILED+=("$SVC")
-    fi
-done
+build_bo
 
 # ─── 結果摘要 ────────────────────────────────────────────────
 echo ""
-if [[ ${#FAILED[@]} -gt 0 ]]; then
-    error "以下服務失敗: ${FAILED[*]}"
-else
-    echo -e "${GREEN}${BOLD}╔══════════════════════════════════╗${RESET}"
-    echo -e "${GREEN}${BOLD}║   Frontend Deploy 全部完成！     ║${RESET}"
-    echo -e "${GREEN}${BOLD}╚══════════════════════════════════╝${RESET}"
-fi
+echo -e "${GREEN}${BOLD}╔══════════════════════════════════╗${RESET}"
+echo -e "${GREEN}${BOLD}║   BO Frontend Deploy 完成！      ║${RESET}"
+echo -e "${GREEN}${BOLD}╚══════════════════════════════════╝${RESET}"

@@ -10,7 +10,18 @@
       "Bash(rtk ls *)",
       "Bash(rtk git *)",
       "Bash(rtk proxy *)",
-      "Bash(./deploy-frontend.sh *)"
+      "Bash(./deploy-frontend.sh *)",
+      "Bash(rtk read *)",
+      "Bash(git merge *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(./deploy-customer-frontend.sh -h)",
+      "Bash(./tag-release-frontend.sh -h)",
+      "Bash(./tag-release-customer-frontend.sh -h)",
+      "Bash(./deploy-customer-frontend.sh -e dev -s purple -n)",
+      "Bash(git mv *)",
+      "Bash(sed -i '' -e 's#\\\\./deploy\\\\.sh#./deploy-api.sh#g' -e 's#\\\\./tag-release\\\\.sh#./tag-api.sh#g' deploy-api.sh tag-api.sh)",
+      "Bash(sed -i '' -e 's#\\\\./deploy-frontend\\\\.sh#./deploy-bo.sh#g' -e 's#\\\\./tag-release-frontend\\\\.sh#./tag-bo.sh#g' deploy-bo.sh tag-bo.sh)",
+      "Bash(sed -i '' -e 's#\\\\./deploy-customer-frontend\\\\.sh#./deploy-web.sh#g' -e 's#\\\\./tag-release-customer-frontend\\\\.sh#./tag-web.sh#g' deploy-web.sh tag-web.sh)"
     ]
   }
 }

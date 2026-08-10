@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CMS 前端 Release Tag 腳本（bo + customer）
+# CMS 後台前端 Release Tag 腳本（bo）
 # 流程: develop → uat → master → git tag
 
 set -euo pipefail
@@ -17,16 +17,13 @@ step()    { echo -e "\n${BOLD}>>> $*${RESET}"; }
 # ─── Repo 定義 ───────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_BO="http://gitlab.mootech.asia/mttw-dev/cms-bo-frontend.git"
-REPO_CUSTOMER="http://gitlab.mootech.asia/mttw-dev/cms-customer-frontend.git"
 DIR_BO="$SCRIPT_DIR/cms-bo-frontend"
-DIR_CUSTOMER="$SCRIPT_DIR/cms-customer-frontend"
 
 # ─── 預設值 ──────────────────────────────────────────────────
 TAG_VERSION=""
 DRY_RUN=false
 DO_UAT=false
 DO_MASTER=false
-REPO_TARGET=""   # 空 = 兩個；bo / customer = 單一
 
 # ─── 說明 ────────────────────────────────────────────────────
 usage() {
@@ -35,38 +32,33 @@ ${BOLD}用法:${RESET}
   $0 -u|-m|-um [-t <version>] [options]
 
 ${BOLD}合版目標（至少選一）:${RESET}
-  -u              合併 develop → uat（bo + customer）
+  -u              合併 develop → uat（bo）
   -m              合併 uat → master 並建立 git tag（-t 省略則自動 patch +1）
   -um / -u -m     兩步驟都執行（完整 release）
 
 ${BOLD}選填:${RESET}
   -t <version>    版本 tag，例如: v1.2.3（-m 時省略則自動遞增）
-  -r <repo>       指定單一 repo：bo 或 customer（省略則兩個都跑）
   -n              Dry run：只印出指令，不實際執行
   -h              顯示此說明
 
-${BOLD}Repos:${RESET}
-  bo       →  $REPO_BO
-  customer →  $REPO_CUSTOMER
+${BOLD}Repo:${RESET}
+  bo →  $REPO_BO
 
 ${BOLD}範例:${RESET}
-  $0 -u                     # 只合 develop → uat（兩個前端 repo）
-  $0 -u -r bo               # 只合 develop → uat（只有 bo）
+  $0 -u                     # 只合 develop → uat
   $0 -m                     # 只合 uat → master + tag（自動遞增版號）
   $0 -m -t v1.2.3           # 只合 uat → master + 指定版號
-  $0 -m -r customer         # 只跑 customer repo
   $0 -um                    # 完整 release（develop → uat → master → tag）
-  $0 -um -r bo -t v1.2.3    # 完整 release，只跑 bo，指定版號
+  $0 -um -t v1.2.3          # 完整 release，指定版號
   $0 -um -n                 # dry run
 EOF
     exit 0
 }
 
 # ─── 解析參數 ────────────────────────────────────────────────
-while getopts "t:r:umnh" opt; do
+while getopts "t:umnh" opt; do
     case "$opt" in
         t) TAG_VERSION="$OPTARG" ;;
-        r) REPO_TARGET="$OPTARG" ;;
         u) DO_UAT=true ;;
         m) DO_MASTER=true ;;
         n) DRY_RUN=true ;;
@@ -79,11 +71,6 @@ if ! $DO_UAT && ! $DO_MASTER; then
     error "請指定合版目標：-u（合到 uat）、-m（合到 master）或 -um（兩者）"
 fi
 
-case "$REPO_TARGET" in
-    bo|customer|"") ;;
-    *) error "無效的 repo：$REPO_TARGET（可用: bo, customer）" ;;
-esac
-
 # ─── 執行或 dry-run 包裝 ─────────────────────────────────────
 run() {
     if $DRY_RUN; then
@@ -95,15 +82,14 @@ run() {
 
 # ─── 摘要輸出 ────────────────────────────────────────────────
 echo -e "\n${BOLD}╔══════════════════════════════════╗${RESET}"
-echo -e "${BOLD}║   CMS Frontend Release Tag       ║${RESET}"
+echo -e "${BOLD}║   CMS BO Frontend Release Tag    ║${RESET}"
 echo -e "${BOLD}╚══════════════════════════════════╝${RESET}"
 $DO_UAT    && info "步驟:      develop → uat"
 $DO_MASTER && info "步驟:      uat → master + tag"
 $DO_MASTER && info "版本 tag:  ${TAG_VERSION:-"(自動遞增)"}"
-info "目標 repo: ${REPO_TARGET:-"bo + customer"}"
 $DRY_RUN && warn "DRY-RUN 模式，不會實際執行"
 
-# ─── 處理單一 repo ───────────────────────────────────────────
+# ─── 處理 repo ───────────────────────────────────────────────
 process_repo() {
     local REPO_URL="$1"
     local SOURCE_DIR="$2"
@@ -179,16 +165,11 @@ process_repo() {
     fi
 }
 
-# ─── 執行 repo ───────────────────────────────────────────────
-case "$REPO_TARGET" in
-    bo)       process_repo "$REPO_BO"       "$DIR_BO" ;;
-    customer) process_repo "$REPO_CUSTOMER" "$DIR_CUSTOMER" ;;
-    *)        process_repo "$REPO_BO"       "$DIR_BO"
-              process_repo "$REPO_CUSTOMER" "$DIR_CUSTOMER" ;;
-esac
+# ─── 執行 ────────────────────────────────────────────────────
+process_repo "$REPO_BO" "$DIR_BO"
 
 echo ""
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════╗${RESET}"
 echo -e "${GREEN}${BOLD}║         完成！                   ║${RESET}"
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════╝${RESET}"
-$DO_MASTER && info "下一步: ./deploy-frontend.sh -e prod -s all"
+$DO_MASTER && info "下一步: ./deploy-bo.sh -e prod"
