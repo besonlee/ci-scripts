@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CMS 前台前端 Release Tag 腳本（customer）
-# 流程: develop → uat → master → git tag
+# 流程: theme-purple → master-orange → git tag
 
 set -euo pipefail
 
@@ -32,8 +32,8 @@ ${BOLD}用法:${RESET}
   $0 -u|-m|-um [-t <version>] [options]
 
 ${BOLD}合版目標（至少選一）:${RESET}
-  -u              合併 develop → uat（customer）
-  -m              合併 uat → master 並建立 git tag（-t 省略則自動 patch +1）
+  -u              同步 theme-purple（customer；已無 develop 分支，僅 fetch/pull，不合併）
+  -m              合併 theme-purple → master-orange 並建立 git tag（-t 省略則自動 patch +1）
   -um / -u -m     兩步驟都執行（完整 release）
 
 ${BOLD}選填:${RESET}
@@ -45,10 +45,10 @@ ${BOLD}Repo:${RESET}
   customer →  $REPO_CUSTOMER
 
 ${BOLD}範例:${RESET}
-  $0 -u                     # 只合 develop → uat
-  $0 -m                     # 只合 uat → master + tag（自動遞增版號）
-  $0 -m -t v1.2.3           # 只合 uat → master + 指定版號
-  $0 -um                    # 完整 release（develop → uat → master → tag）
+  $0 -u                     # 只同步 theme-purple
+  $0 -m                     # 只合 theme-purple → master-orange + tag（自動遞增版號）
+  $0 -m -t v1.2.3           # 只合 theme-purple → master-orange + 指定版號
+  $0 -um                    # 完整 release（theme-purple → master-orange → tag）
   $0 -um -t v1.2.3          # 完整 release，指定版號
   $0 -um -n                 # dry run
 EOF
@@ -84,8 +84,8 @@ run() {
 echo -e "\n${BOLD}╔══════════════════════════════════╗${RESET}"
 echo -e "${BOLD}║ CMS Customer Frontend Release Tag ║${RESET}"
 echo -e "${BOLD}╚══════════════════════════════════╝${RESET}"
-$DO_UAT    && info "步驟:      develop → uat"
-$DO_MASTER && info "步驟:      uat → master + tag"
+$DO_UAT    && info "步驟:      同步 theme-purple"
+$DO_MASTER && info "步驟:      theme-purple → master-orange + tag"
 $DO_MASTER && info "版本 tag:  ${TAG_VERSION:-"(自動遞增)"}"
 $DRY_RUN && warn "DRY-RUN 模式，不會實際執行"
 
@@ -137,26 +137,22 @@ process_repo() {
         fi
     fi
 
-    # ─── 合併 develop → uat ──────────────────────────────────
+    # ─── 同步 theme-purple（無 develop 分支，僅 fetch/pull）───
     if $DO_UAT; then
-        step "合併 develop → uat ($REPO_NAME)"
-        run git -C "$SOURCE_DIR" checkout uat
-        run git -C "$SOURCE_DIR" pull origin uat
-        local MERGE_MSG="Merge branch 'develop' into uat"
-        $DO_MASTER && MERGE_MSG="$MERGE_MSG for release $TAG_VERSION"
-        run git -C "$SOURCE_DIR" merge --no-ff origin/develop -m "$MERGE_MSG"
-        run git -C "$SOURCE_DIR" push origin uat
-        success "develop 已合併至 uat 並推送"
+        step "同步 theme-purple ($REPO_NAME)"
+        run git -C "$SOURCE_DIR" checkout theme-purple
+        run git -C "$SOURCE_DIR" pull origin theme-purple
+        success "theme-purple 已同步"
     fi
 
-    # ─── 合併 uat → master + tag ─────────────────────────────
+    # ─── 合併 theme-purple → master-orange + tag ─────────────
     if $DO_MASTER; then
-        step "合併 uat → master ($REPO_NAME)"
-        run git -C "$SOURCE_DIR" checkout master
-        run git -C "$SOURCE_DIR" pull origin master
-        run git -C "$SOURCE_DIR" merge --no-ff origin/uat -m "Merge branch 'uat' into master for release $TAG_VERSION"
-        run git -C "$SOURCE_DIR" push origin master
-        success "uat 已合併至 master 並推送"
+        step "合併 theme-purple → master-orange ($REPO_NAME)"
+        run git -C "$SOURCE_DIR" checkout master-orange
+        run git -C "$SOURCE_DIR" pull origin master-orange
+        run git -C "$SOURCE_DIR" merge --no-ff origin/theme-purple -m "Merge branch 'theme-purple' into master-orange for release $TAG_VERSION"
+        run git -C "$SOURCE_DIR" push origin master-orange
+        success "theme-purple 已合併至 master-orange 並推送"
 
         step "建立 git tag: $TAG_VERSION ($REPO_NAME)"
         run git -C "$SOURCE_DIR" tag "$TAG_VERSION"

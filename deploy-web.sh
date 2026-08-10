@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # CMS 前台前端 Docker 打包推送腳本
-# 用法: ./deploy-web.sh -e <env> [-s <service>] [-b <branch>]
+# 用法: ./deploy-web.sh -e <env> [-b <branch>]
+# 每次執行會固定打包 customer / orange / purple 三個版本（不再分服務選擇）
 
 set -euo pipefail
 
@@ -20,7 +21,6 @@ REPO_CUSTOMER="http://gitlab.mootech.asia/mttw-dev/cms-customer-frontend.git"
 
 # ─── 預設值 ──────────────────────────────────────────────────
 ENV=""
-SERVICES=()
 BRANCH=""
 DRY_RUN=false
 SHA_TAG=false
@@ -32,47 +32,41 @@ ${BOLD}用法:${RESET}
   $0 -e <env> [options]
 
 ${BOLD}必填:${RESET}
-  -e <env>        環境: dev | uat | prod
+  -e <env>        環境: uat | prod
 
 ${BOLD}選填:${RESET}
-  -s <service>    服務: customer | orange | purple | all（預設: all）
-                  可多次指定，例如: -s customer -s orange -s purple
-  -b <branch>     覆蓋分支（預設: dev→develop, uat→uat, prod→master；不影響 purple）
-  -t              同時推送 Git SHA tag（僅 dev/uat 有效，預設不推）
+  -b <branch>     覆蓋分支（預設: uat→theme-purple, prod→master-orange）
+  -t              同時推送 Git SHA tag（僅 uat 有效，預設不推）
   -n              Dry run：只印出指令，不實際執行
   -h              顯示此說明
 
-${BOLD}Purple 主題:${RESET}
-  不論 -e / -b 為何，purple 固定 checkout customer repo 的 theme-purple 分支打包。
+${BOLD}固定打包內容:${RESET}
+  每次執行都會打包 customer / orange / purple 三個版本（不分服務選擇）。
 
 ${BOLD}Prod 流程:${RESET}
   請先執行 ./tag-web.sh -um 完成合版與打 tag，
   再執行 ./deploy-web.sh -e prod，會自動取用最新 tag 作為 image tag。
 
-${BOLD}環境對應 Registry:${RESET}
-  dev  →  192.168.100.112:5001
-  uat  →  registry.mootech.asia/mttw-dev/docker-images
-  prod →  registry.mootech.asia/mttw-dev/docker-images  (image 名稱加 -prod)
+${BOLD}環境對應 Registry / 分支:${RESET}
+  uat  →  registry.mootech.asia/mttw-dev/docker-images  (branch: theme-purple)
+  prod →  registry.mootech.asia/mttw-dev/docker-images  (branch: master-orange, image 名稱加 -prod)
 
 ${BOLD}前台 Repo:${RESET}
   customer →  $REPO_CUSTOMER
 
 ${BOLD}範例:${RESET}
-  $0 -e dev -s all
-  $0 -e uat -s customer
-  $0 -e prod -s all
-  $0 -e dev -s purple                      # 只打包 theme-purple 版本
-  $0 -e dev -b feature/xxx
-  $0 -e dev -n                             # dry run
+  $0 -e uat
+  $0 -e prod
+  $0 -e uat -b feature/xxx
+  $0 -e uat -n                             # dry run
 EOF
     exit 0
 }
 
 # ─── 解析參數 ────────────────────────────────────────────────
-while getopts "e:s:b:tnh" opt; do
+while getopts "e:b:tnh" opt; do
     case "$opt" in
         e) ENV="$OPTARG" ;;
-        s) SERVICES+=("$OPTARG") ;;
         b) BRANCH="$OPTARG" ;;
         t) SHA_TAG=true ;;
         n) DRY_RUN=true ;;
@@ -82,24 +76,18 @@ while getopts "e:s:b:tnh" opt; do
 done
 
 # ─── 驗證 ────────────────────────────────────────────────────
-[[ -z "$ENV" ]] && error "必須指定環境 -e dev|uat|prod"
-[[ "$ENV" != "dev" && "$ENV" != "uat" && "$ENV" != "prod" ]] && error "環境必須是 dev、uat 或 prod，收到: $ENV"
+[[ -z "$ENV" ]] && error "必須指定環境 -e uat|prod"
+[[ "$ENV" != "uat" && "$ENV" != "prod" ]] && error "環境必須是 uat 或 prod，收到: $ENV"
 
 if [[ -z "$BRANCH" ]]; then
     case "$ENV" in
-        dev)  BRANCH="develop" ;;
-        uat)  BRANCH="uat" ;;
-        prod) BRANCH="master" ;;
+        uat)  BRANCH="theme-purple" ;;
+        prod) BRANCH="master-orange" ;;
     esac
 fi
 
-[[ ${#SERVICES[@]} -eq 0 ]] && SERVICES=("all")
-
 # ─── Registry 設定 ───────────────────────────────────────────
-if [[ "$ENV" == "dev" ]]; then
-    REGISTRY="192.168.100.112:5001"
-    IMAGE_SUFFIX=""
-elif [[ "$ENV" == "uat" ]]; then
+if [[ "$ENV" == "uat" ]]; then
     REGISTRY="registry.mootech.asia/mttw-dev/docker-images"
     IMAGE_SUFFIX=""
 else
@@ -123,7 +111,6 @@ echo -e "${BOLD}╚════════════════════�
 info "環境:      $ENV"
 info "Registry:  $REGISTRY"
 info "Branch:    $BRANCH"
-info "服務:      ${SERVICES[*]}"
 $SHA_TAG && info "SHA Tag:   啟用（-t）"
 $DRY_RUN && warn "DRY-RUN 模式，不會實際執行"
 
@@ -169,7 +156,7 @@ build_and_push() {
         done
     fi
 
-    # 加入 git sha tag（prod 不加；dev/uat 需明確指定 -t 才推）
+    # 加入 git sha tag（prod 不加；uat 需明確指定 -t 才推）
     if [[ "$ENV" != "prod" ]] && $SHA_TAG; then
         for TAG in "${BASE_TAGS[@]}"; do
             TAGS+=("${TAG%:*}:${GIT_SHA}")
@@ -237,13 +224,12 @@ build_customer_orange() {
 
 build_customer_purple() {
     local SOURCE_DIR="$SCRIPT_DIR/cms-customer-frontend"
-    local PURPLE_BRANCH="theme-purple"
-    sync_repo "$REPO_CUSTOMER" "$SOURCE_DIR" "$PURPLE_BRANCH"
+    sync_repo "$REPO_CUSTOMER" "$SOURCE_DIR"
 
     TAG_VERSION=""
     if [[ "$ENV" == "prod" ]]; then
         TAG_VERSION=$(git -C "$SOURCE_DIR" tag --sort=-version:refname | head -1)
-        [[ -z "$TAG_VERSION" ]] && error "cms-customer-frontend ($PURPLE_BRANCH) 找不到任何 git tag，請先執行 ./tag-web.sh -m"
+        [[ -z "$TAG_VERSION" ]] && error "cms-customer-frontend ($BRANCH) 找不到任何 git tag，請先執行 ./tag-web.sh -m"
         info "使用最新 tag: $TAG_VERSION"
     fi
 
@@ -255,27 +241,12 @@ build_customer_purple() {
         "$REGISTRY/cms-player-web${IMAGE_SUFFIX}:latest"
 }
 
-# ─── 執行 Build ──────────────────────────────────────────────
+# ─── 執行 Build（固定打包 customer / orange / purple）────────
 FAILED=()
 
-build_service() {
-    local SVC="$1"
-    case "$SVC" in
-        customer) build_customer ;;
-        orange)   build_customer_orange ;;
-        purple)   build_customer_purple ;;
-        all)
-            build_customer
-            build_customer_orange
-            build_customer_purple
-            ;;
-        *) error "未知服務: $SVC，可選: customer | orange | purple | all" ;;
-    esac
-}
-
-for SVC in "${SERVICES[@]}"; do
-    if ! build_service "$SVC"; then
-        FAILED+=("$SVC")
+for FN in build_customer build_customer_orange build_customer_purple; do
+    if ! "$FN"; then
+        FAILED+=("$FN")
     fi
 done
 

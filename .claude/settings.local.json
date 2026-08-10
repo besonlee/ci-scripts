@@ -21,7 +21,15 @@
       "Bash(git mv *)",
       "Bash(sed -i '' -e 's#\\\\./deploy\\\\.sh#./deploy-api.sh#g' -e 's#\\\\./tag-release\\\\.sh#./tag-api.sh#g' deploy-api.sh tag-api.sh)",
       "Bash(sed -i '' -e 's#\\\\./deploy-frontend\\\\.sh#./deploy-bo.sh#g' -e 's#\\\\./tag-release-frontend\\\\.sh#./tag-bo.sh#g' deploy-bo.sh tag-bo.sh)",
-      "Bash(sed -i '' -e 's#\\\\./deploy-customer-frontend\\\\.sh#./deploy-web.sh#g' -e 's#\\\\./tag-release-customer-frontend\\\\.sh#./tag-web.sh#g' deploy-web.sh tag-web.sh)"
+      "Bash(sed -i '' -e 's#\\\\./deploy-customer-frontend\\\\.sh#./deploy-web.sh#g' -e 's#\\\\./tag-release-customer-frontend\\\\.sh#./tag-web.sh#g' deploy-web.sh tag-web.sh)",
+      "Bash(./deploy-web.sh -h)",
+      "Bash(./tag-web.sh -h)",
+      "Bash(./deploy-web.sh -e uat -s all -n)",
+      "Bash(./deploy-web.sh -e prod -s purple -n)",
+      "Bash(./deploy-web.sh -e dev -n)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(cd *)",
+      "Bash(./deploy-web.sh -e uat -n)"
     ]
   }
 }
